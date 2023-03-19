@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use std::error::Error;
+use std::{error::Error, io::{BufRead, BufReader, self}, fs::File};
 
 type MyResult<T> = Result<T, Box<dyn Error>>;
 
@@ -12,6 +12,14 @@ pub struct Config {
     chars: bool,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct FileInfo {
+    pub num_lines: usize,
+    pub num_words: usize,
+    pub num_bytes: usize,
+    pub num_chars: usize,
+}
+
 pub fn get_args() -> MyResult<Config> {
     let matches = App::new("wcr")
         .version("0.1.0")
@@ -19,17 +27,16 @@ pub fn get_args() -> MyResult<Config> {
         .arg(
             Arg::with_name("files")
                 .value_name("files")
-                .default_value("-")
-                .min_values(1)
                 .help("Input file(s)")
-                .required(false)
+                .default_value("-")
+                .multiple(true)
+                
         )
         .arg(
             Arg::with_name("chars")
                 .long("--chars")
                 .short("-m")
                 .help("Show character count")
-                .required(false)
                 .takes_value(false)
         )
         .arg(
@@ -37,7 +44,6 @@ pub fn get_args() -> MyResult<Config> {
                 .long("--bytes")
                 .short("-c")
                 .help("Show byte count")
-                .required(false)
                 .conflicts_with("chars")
                 .takes_value(false)
         )
@@ -46,7 +52,6 @@ pub fn get_args() -> MyResult<Config> {
                 .long("--lines")
                 .short("-l")
                 .help("Show line count")
-                .required(false)
                 .takes_value(false)
         )
         .arg(
@@ -54,21 +59,58 @@ pub fn get_args() -> MyResult<Config> {
                 .long("--words")
                 .short("-w")
                 .help("Show word count")
-                .required(false)
                 .takes_value(false)
         )
         .get_matches();
 
+    let mut lines = matches.is_present("lines");
+    let mut words = matches.is_present("words");
+    let mut bytes = matches.is_present("bytes");
+    let chars = matches.is_present("chars");
+
+    if [lines, words, bytes, chars].iter().all(|v| v == &false) {
+        lines = true;
+        words = true;
+        bytes = true;
+    }
+
     Ok(Config { 
         files: matches.values_of_lossy("files").unwrap(), 
-        lines: matches.is_present("lines"), 
-        words: matches.is_present("words"), 
-        bytes: matches.is_present("bytes"), 
-        chars: matches.is_present("chars") })
+        lines,
+        words,
+        bytes,
+        chars, 
+    })
 }
 
 
+pub fn open(filename: &str) -> MyResult<Box< dyn BufRead>> {
+    match filename {
+        "-" => Ok(Box::new(BufReader::new(io::stdin()))),
+        _ => Ok(Box::new(BufReader::new(File::open(filename)?))),
+    }
+}
+
+pub fn count(mut file: impl BufRead) -> MyResult<FileInfo> {
+    let mut num_lines = 0;
+    let mut num_words = 0;
+    let mut num_bytes = 0;
+    let mut num_chars = 0;
+
+    Ok(FileInfo { 
+        num_lines,
+        num_words,
+        num_bytes,
+        num_chars,
+    })
+}
+
 pub fn run(config: Config) -> MyResult<()> {
-    println!("{:#?}", config);
+    for file in &config.files {
+        match open(file) {
+            Err(e) => eprintln!("{}", e),
+            Ok(_) => println!("Opened {}", file),
+        }
+    }
     Ok(())
 }
